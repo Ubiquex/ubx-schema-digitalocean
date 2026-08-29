@@ -1,0 +1,10 @@
+{
+  "schema_format": 3,
+  "provider": "digitalocean",
+  "version": "1.0.0",
+  "members": [
+    "digitalocean",
+    "digitalocean_ds"
+  ],
+  "min_binary_version": "1.0.2"
+}
