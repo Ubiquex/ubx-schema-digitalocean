@@ -117,7 +117,7 @@ jobs:
 
           \`\`\`toml
           [providers.digitalocean]
-          source  = \"ubiquex/github\"
+          source  = \"ubiquex/digitalocean\"
           version = \"$v\"
           \`\`\`"
 
