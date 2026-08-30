@@ -22,6 +22,7 @@
     "Default": ""
   },
   "wire_name": "digitalocean",
+  "namespace_from_tags": true,
   "raw_spec": {
     "components": {
       "examples": {
