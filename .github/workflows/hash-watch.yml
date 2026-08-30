@@ -1,0 +1,177 @@
+name: hash-watch
+
+# UBI-217: this repo's own real drift check, the same group-container
+# shape ubx-schema-kubernetes' own hash-watch.yml already established --
+# DigitalOcean's own real published identity is a GROUP of two members
+# (digitalocean: resource mode; digitalocean_ds: data-source mode), both
+# fetched from the identical live upstream OpenAPI spec but built through
+# genuinely different pipelines. --prev-snapshot points at THIS
+# checkout's own root, so a content change that doesn't affect either
+# member's own translated schema produces NoChange and no PR.
+#
+# The one real difference from every other schema repo's own
+# hash-watch.yml: this provider's own [dynamic_providers.digitalocean]
+# entry sets redocly_bundle = true (config.Provider's own doc comment,
+# ubx-provider-dynamic, has the full real reason -- DigitalOcean's real
+# spec uses two Redocly-only $ref conventions kin-openapi cannot follow
+# on its own). That flag shells out to `npx @redocly/cli bundle`, so this
+# workflow needs Node.js -- no separate setup step is added for it since
+# ubuntu-latest's own runner image already ships Node.js/npm/npx
+# pre-installed (confirmed directly against GitHub's own runner-images
+# documentation before relying on it, UBI-217's own cost report), the
+# same real, zero-cost guarantee every other openapi-sourced provider's
+# hash-watch.yml already runs on without ever needing it. The explicit
+# "confirm npx" step below fails loud, early, and clearly if that
+# guarantee ever stops holding, rather than a cryptic failure deep
+# inside the regeneration step.
+#
+# Never auto-merges, matching every other repo in this org.
+
+on:
+  schedule:
+    - cron: "0 6 * * 3" # every Wednesday, 06:00 UTC -- offset from every
+    # other schema repo's own Monday run so a real upstream outage or
+    # rate limit doesn't hit every one of this org's hash-watch runs at
+    # once
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-and-regenerate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out ubx-schema-digitalocean
+        uses: actions/checkout@v4
+
+      - name: Confirm npx is present (redocly_bundle needs it)
+        run: |
+          set -euo pipefail
+          if ! command -v npx > /dev/null; then
+            echo "npx not found on this runner -- ubuntu-latest is expected to ship Node.js/npm/npx pre-installed; this workflow cannot regenerate a redocly_bundle = true provider without it" >&2
+            exit 1
+          fi
+          echo "npx: $(npx --version)"
+
+      - name: Check out ubx-provider-dynamic's own latest real published release (to build it from source)
+        id: dynver
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # UBI-194: this must be a real, tagged release, never main HEAD --
+          # a snapshot's own min_binary_version is stamped from this same
+          # build (see the "Build ubx-provider-dynamic" step's -ldflags
+          # below), so building an untagged HEAD would stamp every
+          # regenerated snapshot with the meaningless default "dev" instead
+          # of a real, acquirable version. Using the latest real GitHub
+          # Release (not main HEAD) means MinBinaryVersion always names a
+          # binary a real ubx install can actually acquire via
+          # provider.AcquireDynamicProviderBinary. Needs whichever real
+          # release first ships UBI-217's own redocly_bundle flag (not yet
+          # cut as of this workflow's own authoring -- latest published is
+          # v1.0.2) -- a run against an older release fails this provider's
+          # own generation the same way it did before UBI-217, since
+          # redocly_bundle is silently unrecognized by an older binary's
+          # own config parsing, not silently correct.
+          ver="$(gh api repos/Ubiquex/ubx-provider-dynamic/releases/latest --jq '.tag_name' | sed 's/^v//')"
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "Building against ubx-provider-dynamic's real, latest published release: v$ver"
+          git clone --depth=1 --branch "v$ver" \
+            "https://github.com/Ubiquex/ubx-provider-dynamic.git" \
+            "${{ runner.temp }}/ubx-provider-dynamic-src"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ runner.temp }}/ubx-provider-dynamic-src/go.mod
+
+      - name: Build ubx-provider-dynamic
+        run: |
+          set -euo pipefail
+          go build -C "${{ runner.temp }}/ubx-provider-dynamic-src" \
+            -ldflags "-X github.com/ubiquex/ubx-provider-dynamic/internal/snapshot.BinaryVersion=${{ steps.dynver.outputs.version }}" \
+            -o "${{ runner.temp }}/ubx-provider-dynamic" \
+            ./cmd/ubx-provider-dynamic
+          got="$("${{ runner.temp }}/ubx-provider-dynamic" --version)"
+          if [ "$got" != "${{ steps.dynver.outputs.version }}" ]; then
+            echo "built binary reports version '$got', expected '${{ steps.dynver.outputs.version }}'" >&2
+            exit 1
+          fi
+
+      - name: Read the committed group version before regenerating
+        id: before
+        run: |
+          set -euo pipefail
+          current="$(python3 -c "import json; print(json.load(open('manifest.json'))['version'])")"
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          echo "Committed manifest.json is at version $current"
+
+      - name: Regenerate the real member and assemble the group
+        id: gen
+        run: |
+          set -euo pipefail
+          mkdir -p "${{ runner.temp }}/gen/.ubx"
+          cat > "${{ runner.temp }}/gen/.ubx/config" <<'EOF'
+          [dynamic_providers.digitalocean]
+          schema_source = "openapi"
+          schema_url = "https://raw.githubusercontent.com/digitalocean/openapi/main/specification/DigitalOcean-public.v2.yaml"
+          base_url = "https://api.digitalocean.com"
+          redocly_bundle = true
+          EOF
+
+          rm -rf "${{ runner.temp }}/new-group"
+          ( cd "${{ runner.temp }}/gen" && \
+            "${{ runner.temp }}/ubx-provider-dynamic" \
+              --generate-snapshot-group="${{ runner.temp }}/new-group" \
+              --group-repo-name=digitalocean \
+              --group-members=digitalocean \
+              --prev-snapshot="$GITHUB_WORKSPACE" )
+
+          new="$(python3 -c "import json; print(json.load(open('${{ runner.temp }}/new-group/manifest.json'))['version'])")"
+          echo "new=$new" >> "$GITHUB_OUTPUT"
+          if [ "$new" = "${{ steps.before.outputs.current }}" ]; then
+            echo "newer=false" >> "$GITHUB_OUTPUT"
+            echo "Already current at ${{ steps.before.outputs.current }} -- nothing to do."
+          else
+            echo "newer=true" >> "$GITHUB_OUTPUT"
+            echo "Real version change: ${{ steps.before.outputs.current }} -> $new"
+          fi
+
+      - name: Report which real members changed
+        if: steps.gen.outputs.newer == 'true'
+        run: |
+          set -euo pipefail
+          for f in "${{ runner.temp }}"/new-group/members/*.json; do
+            name="$(basename "$f" .json)"
+            if ! diff -q "$f" "members/$name.json" > /dev/null 2>&1; then
+              echo "changed member: $name"
+            fi
+          done
+
+      - name: Open PR
+        if: steps.gen.outputs.newer == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cp "${{ runner.temp }}/new-group/manifest.json" manifest.json
+          cp "${{ runner.temp }}"/new-group/members/*.json members/
+          git config user.name "ubx-bot"
+          git config user.email "actions@users.noreply.github.com"
+          branch="snapshot-regen/digitalocean-${{ steps.gen.outputs.new }}"
+          git checkout -b "$branch"
+          git add manifest.json members/
+          git commit -m "snapshot: regenerate from DigitalOcean OpenAPI spec, ${{ steps.before.outputs.current }} -> ${{ steps.gen.outputs.new }}"
+          git push origin "$branch" --force
+          gh pr create \
+            --title "snapshot: regenerate from DigitalOcean OpenAPI spec (${{ steps.before.outputs.current }} -> ${{ steps.gen.outputs.new }})" \
+            --body "Automated regeneration (\`.github/workflows/hash-watch.yml\`), triggered by re-running ubx-provider-dynamic's own \`--generate-snapshot-group\` (with \`redocly_bundle = true\`, UBI-217) against DigitalOcean's live, public OpenAPI spec (both real members: \`digitalocean\` resource mode, \`digitalocean_ds\` data-source mode) and diffing mechanically against the previously committed group.
+
+          Previous version: \`${{ steps.before.outputs.current }}\`
+          New version: \`${{ steps.gen.outputs.new }}\`
+
+          Only the real, changed members/*.json files are touched -- unaffected members stay byte-identical. Never auto-merges -- review the diff before merging. After merge, dispatch \`publish.yml\` to cut the real GitHub Release." \
+            --base main --head "$branch"

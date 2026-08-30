@@ -14,26 +14,28 @@ Two real members: `digitalocean` (resource mode) and `digitalocean_ds`
 (data-source mode) -- both come from the identical fetch, one pin resolves
 both.
 
-## Real, load-bearing gap: no working `hash-watch.yml` yet
+## UBI-217, landed: `hash-watch.yml` exists, but is not yet operational
 
-Every other real schema repo in this org (`ubx-schema-github`,
-`-azure`, `-google`, ...) carries a `hash-watch.yml` that re-fetches the
-live upstream spec on a weekly cron and opens a PR when it drifts.
-**This repo deliberately does not carry one yet.** DigitalOcean's own
-real, public spec does not load through `ubx-provider-dynamic`'s
-`internal/openapi.Load` as published -- it uses two Redocly-only,
-non-standard `$ref` conventions (a Tag Object's `description` as
-`$ref`, and every Path Item's own HTTP-method field as `$ref` to a
-separate file) that OpenAPI 3.0 does not define and kin-openapi cannot
-resolve. `v1.0.0`'s own snapshot here was generated from a manually
-bundled copy (`npx @redocly/cli bundle`, run once, by hand, this
-session) -- a real, correct one-time generation, not a fabricated
-number, but not something a scheduled CI job can repeat unattended.
+DigitalOcean's own real, public spec does not load through
+`ubx-provider-dynamic`'s `internal/openapi.Load` as published -- it uses
+two Redocly-only, non-standard `$ref` conventions (a Tag Object's
+`description` as `$ref`, and every Path Item's own HTTP-method field as
+`$ref` to a separate file) that OpenAPI 3.0 does not define and
+kin-openapi cannot resolve. `v1.0.0`'s own snapshot here was originally
+generated from a manually bundled copy (`npx @redocly/cli bundle`, run
+once, by hand) -- a real, correct one-time generation, not a fabricated
+number, but not something a scheduled CI job could repeat unattended.
 
-Tracked as UBI-217 in `ubiquex`'s own Linear board. Adding
-`hash-watch.yml` here is real, appropriate follow-up work once that
-lands -- do not add one that points at the raw, unbundled upstream URL
-in the meantime; it would fail every single scheduled run.
+UBI-217's own fix: a new per-provider `redocly_bundle` config flag in
+`ubx-provider-dynamic`, shelling out to the identical real
+`npx @redocly/cli bundle` command automatically. Verified directly:
+regenerating through the new, official mechanism produces byte-identical
+content to what's already committed here. `hash-watch.yml` now exists
+and uses it, but needs whichever `ubx-provider-dynamic` release first
+ships the flag (not yet published as of this note -- check
+`gh release list --repo Ubiquex/ubx-provider-dynamic` before assuming
+it's live). See `STATE.md` for the exact current blocker (a separate,
+real secret-scanning false positive on the push itself, not this).
 
 ## Session protocol
 
@@ -58,9 +60,8 @@ in the meantime; it would fail every single scheduled run.
   republish an existing tag. Verify a real release via `gh api
   repos/Ubiquex/ubx-schema-digitalocean/releases/tags/v<version>` after
   dispatch, not the workflow's own exit status.
-- No `hash-watch.yml` yet -- see the real, named gap above (UBI-217).
-  A future regeneration is a manual `--generate-snapshot-group` run
-  against a manually bundled copy of the spec until UBI-217 lands.
+- `hash-watch.yml` exists (UBI-217) but is not yet operational -- see
+  the note above for exactly what it's still waiting on.
 
 ## Architecture documentation
 
