@@ -9,9 +9,10 @@ name: hash-watch
 # checkout's own root, so a content change that doesn't affect either
 # member's own translated schema produces NoChange and no PR.
 #
-# The one real difference from every other schema repo's own
-# hash-watch.yml: this provider's own [dynamic_providers.digitalocean]
-# entry sets redocly_bundle = true (config.Provider's own doc comment,
+# Two real differences from every other schema repo's own hash-watch.yml,
+# both on this provider's own [dynamic_providers.digitalocean] entry:
+#
+# redocly_bundle = true (config.Provider's own doc comment,
 # ubx-provider-dynamic, has the full real reason -- DigitalOcean's real
 # spec uses two Redocly-only $ref conventions kin-openapi cannot follow
 # on its own). That flag shells out to `npx @redocly/cli bundle`, so this
@@ -24,6 +25,16 @@ name: hash-watch
 # "confirm npx" step below fails loud, early, and clearly if that
 # guarantee ever stops holding, rather than a cryptic failure deep
 # inside the regeneration step.
+#
+# namespace_from_tags = true (UBI-222, config.Provider's own doc comment
+# has the full real reason -- without this, DigitalOcean's real ~195
+# resource/data-source types fragment into roughly 55 near-single-
+# resource fabricated services under the mechanical wire-type split
+# every other openapi-sourced provider relies on; DigitalOcean's own
+# real spec carries clean, usable operation tags that already match its
+# real product taxonomy). Needs ubx-provider-dynamic v1.0.4 or later --
+# see the "Set up Go"/"Build ubx-provider-dynamic" steps' own comment
+# below for why an older release cannot serve this correctly.
 #
 # Never auto-merges, matching every other repo in this org.
 
@@ -69,13 +80,14 @@ jobs:
           # of a real, acquirable version. Using the latest real GitHub
           # Release (not main HEAD) means MinBinaryVersion always names a
           # binary a real ubx install can actually acquire via
-          # provider.AcquireDynamicProviderBinary. Needs whichever real
-          # release first ships UBI-217's own redocly_bundle flag (not yet
-          # cut as of this workflow's own authoring -- latest published is
-          # v1.0.2) -- a run against an older release fails this provider's
-          # own generation the same way it did before UBI-217, since
-          # redocly_bundle is silently unrecognized by an older binary's
-          # own config parsing, not silently correct.
+          # provider.AcquireDynamicProviderBinary. Needs at least v1.0.4
+          # (UBI-222's own real, published fix: namespace_from_tags plus
+          # the determinism fix for its own collision resolution) -- a run
+          # against an older release fails this provider's own generation
+          # or silently produces non-deterministic service grouping,
+          # since namespace_from_tags is unrecognized (or, on v1.0.3
+          # specifically, recognized but non-deterministic) by an older
+          # binary's own config parsing, never silently correct.
           ver="$(gh api repos/Ubiquex/ubx-provider-dynamic/releases/latest --jq '.tag_name' | sed 's/^v//')"
           echo "version=$ver" >> "$GITHUB_OUTPUT"
           echo "Building against ubx-provider-dynamic's real, latest published release: v$ver"
@@ -120,6 +132,7 @@ jobs:
           schema_url = "https://raw.githubusercontent.com/digitalocean/openapi/main/specification/DigitalOcean-public.v2.yaml"
           base_url = "https://api.digitalocean.com"
           redocly_bundle = true
+          namespace_from_tags = true
           EOF
 
           rm -rf "${{ runner.temp }}/new-group"
