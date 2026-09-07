@@ -44,7 +44,12 @@ on:
     # other schema repo's own Monday run so a real upstream outage or
     # rate limit doesn't hit every one of this org's hash-watch runs at
     # once
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      force_binary_version_bump:
+        description: "Bump even if no member content changed, for a ubx-provider-dynamic release that changes WHAT the binary derives (UBI-241). Off by default so an ordinary tag does not manufacture a release across every provider (UBI-249)."
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -138,6 +143,7 @@ jobs:
           rm -rf "${{ runner.temp }}/new-group"
           ( cd "${{ runner.temp }}/gen" && \
             "${{ runner.temp }}/ubx-provider-dynamic" \
+              ${{ inputs.force_binary_version_bump && '--force-binary-version-bump' || '' }} \
               --generate-snapshot-group="${{ runner.temp }}/new-group" \
               --group-repo-name=digitalocean \
               --group-members=digitalocean \
